@@ -2733,8 +2733,10 @@ function VoiceLog({ onItemsParsed }) {
       }
     }
 
-    // 3. Start Live Speech Recognition (primary)
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    // 3. Start Live Speech Recognition (desktop browser ONLY — skip on Android/Capacitor to
+    //    avoid microphone conflict that causes the "cannot record now" system toast)
+    const isNative = typeof window !== "undefined" && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+    const SpeechRec = !isNative && (window.SpeechRecognition || window.webkitSpeechRecognition);
     if (SpeechRec) {
       try {
         const rec = new SpeechRec();
