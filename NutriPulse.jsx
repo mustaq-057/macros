@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { App as CapApp } from "@capacitor/app";
 import {
   Home, Camera, Sparkles, TrendingUp, Droplet, Plus, X, Check, Search,
   Flame, Dumbbell, Utensils, Send, ChevronRight, ChevronLeft, Pencil, Upload, Info,
@@ -1348,6 +1349,31 @@ export default function JazzMacrosApp() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // ── Android hardware back button ─────────────────────────────────────────
+  useEffect(() => {
+    let listenerHandle = null;
+    const register = async () => {
+      listenerHandle = await CapApp.addListener("backButton", () => {
+        // 1. Close any open overlays/modals first
+        if (showQuickDock) { setShowQuickDock(false); return; }
+        if (showQuickAdd)  { setShowQuickAdd(false);  return; }
+        if (showGoalsModal){ setShowGoalsModal(false); return; }
+        if (showReminderEdit){ setShowReminderEdit(false); return; }
+
+        // 2. Navigate back through view hierarchy
+        if (tab === "chat")   { setTab("ai");        return; }
+        if (tab === "habits") { setTab("dashboard"); return; }
+        if (tab !== "dashboard") { setTab("dashboard"); return; }
+
+        // 3. Already on dashboard — exit the app
+        CapApp.exitApp();
+      });
+    };
+    register();
+    return () => { if (listenerHandle) listenerHandle.remove(); };
+  }, [tab, showQuickDock, showQuickAdd, showGoalsModal, showReminderEdit]);
+
 
   const totals = useMemo(() => meals.reduce((a, m) => ({
     calories: a.calories + m.calories, protein: a.protein + m.protein,
