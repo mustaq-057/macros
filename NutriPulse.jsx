@@ -21,6 +21,7 @@ import {
   lookupProductByBarcodeAI, estimateProductByBarcodeAI, analyzeNutritionLabel, parseAudioMeal
 } from "./src/ai/gemini.js";
 import { uploadImageToCloudinary } from "./src/utils/cloudinary.js";
+import { showNotification, scheduleHydrationReminders, requestNotificationPermission } from "./src/utils/notifications.js";
 import IntroScreen from "./src/components/IntroScreen.jsx";
 
 const CSS = `
@@ -1473,25 +1474,19 @@ export default function JazzMacrosApp() {
     setReminder((prev) => {
       const next = typeof valOrFn === "function" ? valOrFn(prev) : valOrFn;
 
-      // If enabling reminders, prompt for actual system/browser notification permission
-      if (next.enabled && !prev.enabled && typeof window !== "undefined" && "Notification" in window) {
-        if (Notification.permission !== "granted" && Notification.permission !== "denied") {
-          Notification.requestPermission().then((perm) => {
-            if (perm === "granted") {
-              try {
-                new Notification("💧 Hydration Reminders Active", {
-                  body: `JazzMacros will remind you every ${next.interval} mins between ${next.start} and ${next.end}!`,
-                });
-              } catch (e) {}
-            }
-          });
-        } else if (Notification.permission === "granted") {
-          try {
-            new Notification("💧 Hydration Reminders Active", {
-              body: `JazzMacros will remind you every ${next.interval} mins between ${next.start} and ${next.end}!`,
-            });
-          } catch (e) {}
-        }
+      if (next.enabled) {
+        requestNotificationPermission().then((granted) => {
+          if (granted && !prev.enabled) {
+            showNotification(
+              "💧 Hydration Reminders Active",
+              `JazzMacros will remind you every ${next.interval} mins between ${next.start} and ${next.end}!`
+            );
+          }
+          // Schedule native alarms
+          scheduleHydrationReminders(true, next.interval, next.start, next.end);
+        });
+      } else {
+        scheduleHydrationReminders(false);
       }
 
       saveReminderSettings(next).catch((err) => {
@@ -1502,15 +1497,18 @@ export default function JazzMacrosApp() {
     });
   }, []);
 
-  // Real-time notification timer loop
+  // Real-time foreground + native notification scheduling
   useEffect(() => {
-    if (!reminder.enabled) return;
+    if (!reminder.enabled) {
+      scheduleHydrationReminders(false);
+      return;
+    }
+
+    // Schedule native background notifications on Android
+    scheduleHydrationReminders(true, reminder.interval, reminder.start, reminder.end);
 
     const intervalMs = Math.max(1, Number(reminder.interval) || 90) * 60 * 1000;
     const timer = setInterval(() => {
-      if (typeof window === "undefined" || !("Notification" in window)) return;
-      if (Notification.permission !== "granted") return;
-
       const now = new Date();
       const currentH = now.getHours();
       const currentM = now.getMinutes();
@@ -1522,12 +1520,10 @@ export default function JazzMacrosApp() {
       const endTotal = endH * 60 + (endM || 0);
 
       if (nowMin >= startTotal && nowMin <= endTotal) {
-        try {
-          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-          new Notification("💧 Time to hydrate!", {
-            body: "Drink a 250ml glass of water to keep muscle hydration and fat metabolism on track.",
-          });
-        } catch (e) {}
+        showNotification(
+          "💧 Time to hydrate!",
+          "Drink a 250ml glass of water to keep muscle hydration and fat metabolism on track."
+        );
       }
     }, intervalMs);
 
@@ -2099,6 +2095,23 @@ function ReminderModal({ reminder, setReminder, onClose }) {
         <div className="np-grid2">
           <div className="np-field"><label>From</label><input className="np-input" type="time" value={local.start} onChange={(e) => setLocal((l) => ({ ...l, start: e.target.value }))} /></div>
           <div className="np-field"><label>Until</label><input className="np-input" type="time" value={local.end} onChange={(e) => setLocal((l) => ({ ...l, end: e.target.value }))} /></div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <button
+            type="button"
+            className="np-btn np-btn-ghost np-btn-sm"
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 14px", fontSize: 12.5 }}
+            onClick={async () => {
+              const granted = await requestNotificationPermission();
+              if (granted) {
+                showNotification("💧 Hydration Test", "Notifications are active! JazzMacros will remind you to drink water.");
+              } else {
+                alert("Please enable notification permissions for JazzMacros in your Android settings.");
+              }
+            }}
+          >
+            <Bell size={15} color="var(--brand)" /> ⚡ Send Test Notification Now
+          </button>
         </div>
         <button className="np-btn np-btn-brand" style={{ width: "100%" }} onClick={() => { setReminder({ ...local, enabled: true }); onClose(); }}>
           <Check size={16} /> Save schedule

@@ -2,21 +2,10 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import JazzMacrosApp from '../NutriPulse.jsx'
 
-// Request Android permissions on startup via Capacitor
-async function requestAppPermissions() {
-  try {
-    // Web Notifications API (works on web + Android via Capacitor)
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        await Notification.requestPermission();
-      }
-    }
-  } catch (e) {
-    console.warn('Permission request error:', e);
-  }
-}
+import { requestNotificationPermission } from './utils/notifications.js'
 
-requestAppPermissions();
+// Request native Android + web notification permissions on app startup
+requestNotificationPermission();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
