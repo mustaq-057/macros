@@ -98,10 +98,21 @@ export async function scheduleHydrationReminders(enabled, intervalMins = 90, sta
       const [endH, endM] = (end || '21:00').split(':').map(Number);
       const interval = Math.max(15, Number(intervalMins) || 90);
 
+      // Rotating hydration messages — each scheduled slot gets a different one
+      const WATER_MSGS = [
+        { title: '💧 Drink water bro!',       body: "You haven't sipped in a while. 250ml right now — muscles stay full, metabolism stays lit. 🔥" },
+        { title: '🚰 Hydration check!',        body: 'Your body is ~60% water and it\'s drying up. Grab a glass and top it off. Don\'t skip this!' },
+        { title: '💧 Water time!',             body: 'Even mild dehydration tanks your focus and energy. One glass now, thank yourself later. 💪' },
+        { title: '🥤 Sip sip go!',            body: 'Protein hits harder when you\'re hydrated. Drink 250ml — keep those macros working for you.' },
+        { title: '💧 Stay hydrated king!',     body: 'Water = better digestion, clearer skin, more energy. One glass. Do it now, don\'t wait.' },
+        { title: '🌊 Hydration o\'clock!',     body: 'Fat metabolism slows when you\'re dry. Drink up and keep your body running at 100%.' },
+      ];
+
       const notifications = [];
       let currentMin = startH * 60 + (startM || 0);
       const endTotal = endH * 60 + (endM || 0);
       let idCounter = 2000;
+      let msgIdx = 0;
 
       while (currentMin <= endTotal && notifications.length < 30) {
         const targetH = Math.floor(currentMin / 60);
@@ -115,9 +126,12 @@ export async function scheduleHydrationReminders(enabled, intervalMins = 90, sta
           scheduledDate.setDate(scheduledDate.getDate() + 1);
         }
 
+        const msg = WATER_MSGS[msgIdx % WATER_MSGS.length];
+        msgIdx++;
+
         notifications.push({
-          title: '💧 Time to hydrate!',
-          body: 'Drink a 250ml glass of water to keep energy, digestion & muscle metabolism on track.',
+          title: msg.title,
+          body: msg.body,
           id: idCounter++,
           channelId: 'hydration_reminders',
           schedule: {

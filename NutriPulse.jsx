@@ -1504,8 +1504,8 @@ export default function JazzMacrosApp() {
         requestNotificationPermission().then((granted) => {
           if (granted && !prev.enabled) {
             showNotification(
-              "💧 Hydration Reminders Active",
-              `JazzMacros will remind you every ${next.interval} mins between ${next.start} and ${next.end}!`
+              "💧 Water Reminders ON!",
+              `You're set! JazzMacros will ping you every ${next.interval} min to sip water between ${next.start}–${next.end}. Stay locked in! 🔥`
             );
           }
           // Schedule native alarms
@@ -1533,6 +1533,17 @@ export default function JazzMacrosApp() {
     // Schedule native background notifications on Android
     scheduleHydrationReminders(true, reminder.interval, reminder.start, reminder.end);
 
+    // Rotating water reminder messages so they never feel repetitive
+    const WATER_MSGS = [
+      { title: "💧 Drink water bro!",        body: "You haven't sipped in a while. 250ml right now — muscles stay full, metabolism stays lit. 🔥" },
+      { title: "🚰 Hydration check!",         body: "Your body is ~60% water and it's drying up. Grab a glass and top it off. Don't skip this one!" },
+      { title: "💧 Water time!",              body: "Even mild dehydration tanks your focus and energy. One glass now, thank yourself later. 💪" },
+      { title: "🥤 Sip sip go!",             body: "Protein hits harder when you're hydrated. Drink 250ml — keep those macros working for you." },
+      { title: "💧 Stay hydrated king!",      body: "Water = better digestion, clearer skin, more energy. One glass. Do it now, don't wait." },
+      { title: "🌊 Hydration o'clock!",       body: "Fat metabolism slows when you're dry. Drink up and keep your body running at 100%." },
+    ];
+    let _msgIdx = 0;
+
     const intervalMs = Math.max(1, Number(reminder.interval) || 90) * 60 * 1000;
     const timer = setInterval(() => {
       const now = new Date();
@@ -1546,10 +1557,9 @@ export default function JazzMacrosApp() {
       const endTotal = endH * 60 + (endM || 0);
 
       if (nowMin >= startTotal && nowMin <= endTotal) {
-        showNotification(
-          "💧 Time to hydrate!",
-          "Drink a 250ml glass of water to keep muscle hydration and fat metabolism on track."
-        );
+        const msg = WATER_MSGS[_msgIdx % WATER_MSGS.length];
+        _msgIdx++;
+        showNotification(msg.title, msg.body);
       }
     }, intervalMs);
 
@@ -2130,7 +2140,7 @@ function ReminderModal({ reminder, setReminder, onClose }) {
             onClick={async () => {
               const granted = await requestNotificationPermission();
               if (granted) {
-                showNotification("💧 Hydration Test", "Notifications are active! JazzMacros will remind you to drink water.");
+                showNotification("💧 Test — You're all set!", "Water reminders are working! JazzMacros will keep you hydrated all day. Stay locked in 💪");
               } else {
                 alert("Please enable notification permissions for JazzMacros in your Android settings.");
               }
