@@ -78,6 +78,7 @@ const CSS = `
   position:relative;
   border-left:1px solid var(--line);
   border-right:1px solid var(--line);
+  overflow:hidden;
 }
 @media(min-width:560px){
   .np-root{ padding:28px 12px; }
@@ -375,11 +376,11 @@ const CSS = `
   border-bottom-left-radius:4px; color:var(--ink); box-shadow:0 2px 10px rgba(0,0,0,0.03);
 }
 .np-bubble-user{ background:var(--brand); color:#fff; align-self:flex-end; border-bottom-right-radius:4px; font-weight:500; }
-.np-chat-input-bar{ display:flex; gap:8px; padding:10px 18px calc(env(safe-area-inset-bottom,0px) + 10px); background:var(--surface-2); border-top:1px solid var(--line); }
-.np-chat-input-bar input{ flex:1; border:1.5px solid var(--line); border-radius:20px; padding:11px 15px; font-size:13.5px; font-family:'Inter',sans-serif; outline:none; background:var(--surface); }
+.np-chat-input-bar{ display:flex; gap:8px; padding:10px 18px calc(env(safe-area-inset-bottom,0px) + 10px); background:var(--surface-2); border-top:1px solid var(--line); flex-shrink:0; }
+.np-chat-input-bar input{ flex:1; border:1.5px solid var(--line); border-radius:20px; padding:11px 15px; font-size:13.5px; font-family:'Inter',sans-serif; outline:none; background:var(--surface); color:var(--ink); }
 .np-send-btn{ width:42px; height:42px; border-radius:50%; background:var(--accent); border:none; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
-.np-quick-prompts{ display:flex; gap:8px; overflow-x:auto; padding:0 18px 10px; }
-.np-quick-prompt{ flex-shrink:0; font-size:12px; font-weight:600; background:var(--surface); border:1.5px solid var(--line); border-radius:20px; padding:7px 12px; cursor:pointer; }
+.np-quick-prompts{ display:flex; gap:8px; overflow-x:auto; padding:0 18px 10px; flex-shrink:0; }
+.np-quick-prompt{ flex-shrink:0; font-size:12px; font-weight:600; background:var(--surface); border:1.5px solid var(--line); border-radius:20px; padding:7px 12px; cursor:pointer; white-space:nowrap; }
 
 /* AI Message Elements */
 .np-ai-lead-banner{
@@ -1602,7 +1603,7 @@ export default function JazzMacrosApp() {
             {tab === "ai" && <AISuggestions remaining={remaining} totals={totals} goals={goals} meals={meals} addMeal={addMeal} onOpenChat={() => setTab("chat")} />}
             {tab === "trends" && <Trends history={history} goals={goals} />}
           </div>
-          {tab === "chat" && <ChatView remaining={remaining} totals={totals} meals={meals} goals={goals} onBack={() => setTab("ai")} />}
+          {tab === "chat" && <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}><ChatView remaining={remaining} totals={totals} meals={meals} goals={goals} onBack={() => setTab("ai")} /></div>}
           {tab === "habits" && (
             <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#0D0D0D", color: "#fff" }}>
               {/* Header */}
@@ -1783,11 +1784,12 @@ function TopBar({ streak = 0, onReplayIntro }) {
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
   return (
     <div className="np-topbar">
-      <div>
-        <div className="np-word" onClick={onReplayIntro} style={{ cursor: "pointer" }} title="Click to replay intro">
-          <span className="dot" />JazzMacros
+      <div onClick={onReplayIntro} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }} title="Click to replay intro">
+        <img src="/logo.png" alt="JazzMacros" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }} />
+        <div>
+          <div className="np-word" style={{ fontSize: 17 }}>JazzMacros</div>
+          <div className="np-date">{today}</div>
         </div>
-        <div className="np-date">{today}</div>
       </div>
       <div className="np-streak"><Flame size={13} /> {streak} day streak</div>
     </div>
@@ -3899,12 +3901,12 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
         })));
         setStep("review");
       } else {
-        setScanNotice("JazzCoach could not clearly identify food items in this photo. Try taking a clearer photo or search below.");
+        setScanNotice("❌ Food not detected — JazzCoach could not identify any food items in this photo. Please take a clearer, well-lit photo of your meal and try again.");
         setStep("idle");
       }
     } catch (err) {
       console.error("JazzCoach Vision scan failed:", err);
-      setScanNotice("Could not analyze meal: " + (err.message || "Network issue") + ". Please try again.");
+      setScanNotice("❌ Food not detected — " + (err.message || "Analysis failed") + ". Please retake the photo and try again.");
       setStep("idle");
     }
   }
@@ -5191,7 +5193,7 @@ function ChatView({ remaining, totals, meals = [], goals = DEFAULT_GOALS, onBack
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 65px)", maxHeight: 720 }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, flex: 1, background: "var(--surface-2)" }}>
       <div style={{ padding: "16px 18px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={onBack} style={{ background: "var(--surface)", border: "1.5px solid var(--line)", borderRadius: 10, width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>

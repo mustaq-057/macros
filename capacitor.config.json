@@ -1,6 +1,6 @@
 {
-  "appId": "com.nutripulse.app",
-  "appName": "NutriPulse",
+  "appId": "com.jazzmacros.app",
+  "appName": "JazzMacros",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
@@ -19,6 +19,11 @@
     "Keyboard": {
       "resize": "body",
       "style": "dark"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon_config_sample",
+      "iconColor": "#1F5D4C",
+      "sound": "beep.wav"
     }
   },
   "android": {
