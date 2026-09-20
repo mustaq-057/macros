@@ -2065,9 +2065,34 @@ function ReminderModal({ reminder, setReminder, onClose }) {
         </div>
         <div className="np-field">
           <label>Remind me every</label>
-          <select className="np-input" value={local.interval} onChange={(e) => setLocal((l) => ({ ...l, interval: Number(e.target.value) }))}>
-            {[30, 45, 60, 90, 120].map((m) => <option key={m} value={m}>{m} minutes</option>)}
-          </select>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+            {[30, 45, 60, 90, 120].map((m) => {
+              const selected = local.interval === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setLocal((l) => ({ ...l, interval: m }))}
+                  style={{
+                    flex: "1 1 calc(20% - 8px)",
+                    minWidth: 50,
+                    padding: "9px 6px",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    fontWeight: selected ? 700 : 500,
+                    background: selected ? "var(--brand)" : "var(--surface-2)",
+                    color: selected ? "#FFF" : "var(--ink)",
+                    border: selected ? "1px solid var(--brand)" : "1px solid var(--line)",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                    textAlign: "center"
+                  }}
+                >
+                  {m} min
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="np-grid2">
           <div className="np-field"><label>From</label><input className="np-input" type="time" value={local.start} onChange={(e) => setLocal((l) => ({ ...l, start: e.target.value }))} /></div>
@@ -2726,11 +2751,11 @@ function VoiceLog({ onItemsParsed }) {
       if (parsedItems && parsedItems.length > 0) {
         onItemsParsed(parsedItems);
       } else {
-        alert("JazzCoach could not detect meal items. Try speaking clearly (e.g. '2 besan chillas, curd, and a glass of chaas').");
+        setErrorMsg("JazzCoach could not detect meal items. Try speaking clearly (e.g. '2 besan chillas, curd, and a glass of chaas').");
       }
     } catch (err) {
       console.error("Spoken meal parse error:", err);
-      alert("Failed to analyze meal with JazzCoach AI. Please try again.");
+      setErrorMsg("Failed to analyze meal with JazzCoach AI. Please try again.");
     } finally {
       setParsing(false);
       setParseStatus(null);
@@ -2891,6 +2916,7 @@ function BarcodeLog({ onAddMeal, remaining }) {
   const [servings, setServings] = useState(1);
   const [cameraActive, setCameraActive] = useState(false);
   const [labelScanning, setLabelScanning] = useState(false);
+  const [barcodeNotice, setBarcodeNotice] = useState(null);
 
   // Persist last 5 scanned products across sessions
   const RECENT_KEY = "jazz_recent_barcodes_v1";
@@ -3116,11 +3142,11 @@ function BarcodeLog({ onAddMeal, remaining }) {
           setResult(ocrResult);
           setServings(1);
         } else {
-          alert("Gemini Flash could not clearly read the nutrition table. Please ensure good lighting and try again.");
+          setBarcodeNotice("Gemini Flash could not clearly read the nutrition table. Please ensure good lighting and try again.");
         }
       } catch (ocrErr) {
         console.error("Gemini nutrition label OCR failed:", ocrErr);
-        alert("Failed to read nutrition label with Gemini Flash AI.");
+        setBarcodeNotice("Failed to read nutrition label with Gemini Flash AI.");
       } finally {
         setLabelScanning(false);
         setLoadingMsg("");
@@ -3131,7 +3157,7 @@ function BarcodeLog({ onAddMeal, remaining }) {
 
   const startCameraBarcode = () => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      alert("Camera is not available on this device.");
+      setBarcodeNotice("Camera is not available on this device.");
       return;
     }
     setCameraActive(true);
@@ -3166,7 +3192,7 @@ function BarcodeLog({ onAddMeal, remaining }) {
       })
       .catch((err) => {
         console.error("Camera access failed:", err);
-        alert("Camera permission denied or camera unavailable.");
+        setBarcodeNotice("Camera permission denied or camera unavailable.");
         setCameraActive(false);
       });
   };
@@ -3197,6 +3223,31 @@ function BarcodeLog({ onAddMeal, remaining }) {
         <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 14 }}>
           Look up verified nutrition via Open Food Facts &amp; Gemini Flash AI, or snap a photo of any nutrition box.
         </div>
+
+        {barcodeNotice && (
+          <div style={{
+            background: "#2A1815",
+            border: "1px solid #FF6B47",
+            color: "#FFA896",
+            borderRadius: 10,
+            padding: "10px 14px",
+            marginBottom: 12,
+            fontSize: 12.5,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8
+          }}>
+            <span>{barcodeNotice}</span>
+            <button
+              type="button"
+              onClick={() => setBarcodeNotice(null)}
+              style={{ background: "none", border: "none", color: "#FFA896", cursor: "pointer", display: "flex" }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {cameraActive && (
           <div style={{ position: "relative", marginBottom: 14, borderRadius: 12, overflow: "hidden", background: "#000" }}>
@@ -3517,6 +3568,290 @@ function BarcodeLog({ onAddMeal, remaining }) {
 /* ---------------------------------------------------------------------- */
 /* SCAN & LOG                                                              */
 /* ---------------------------------------------------------------------- */
+const SAMPLE_TEST_MEALS = [
+  {
+    icon: "🥗",
+    title: "Grilled Chicken Bowl",
+    kcal: 380,
+    p: 42,
+    items: [
+      { name: "Grilled Chicken Breast", qty: 150, unit: "g", calories: 248, protein: 46, carbs: 0, fat: 5.4, fiber: 0 },
+      { name: "Brown Rice", qty: 100, unit: "g", calories: 111, protein: 2.6, carbs: 23, fat: 0.9, fiber: 1.8 },
+      { name: "Steamed Broccoli", qty: 80, unit: "g", calories: 28, protein: 2.2, carbs: 5.6, fat: 0.3, fiber: 2.1 },
+    ]
+  },
+  {
+    icon: "🍲",
+    title: "Paneer Tikka & Roti",
+    kcal: 480,
+    p: 26,
+    items: [
+      { name: "Paneer Tikka (Tandoori)", qty: 140, unit: "g", calories: 310, protein: 21, carbs: 6, fat: 22, fiber: 1 },
+      { name: "Whole Wheat Roti (2 pcs)", qty: 2, unit: "pcs", calories: 170, protein: 5.2, carbs: 32, fat: 2.2, fiber: 4 },
+    ]
+  },
+  {
+    icon: "🥣",
+    title: "Oatmeal, Whey & Berries",
+    kcal: 360,
+    p: 32,
+    items: [
+      { name: "Rolled Oats", qty: 50, unit: "g", calories: 190, protein: 6.5, carbs: 34, fat: 3.5, fiber: 5 },
+      { name: "Whey Protein Isolate", qty: 30, unit: "g", calories: 120, protein: 25, carbs: 1.5, fat: 1, fiber: 0 },
+      { name: "Blueberries & Strawberries", qty: 80, unit: "g", calories: 45, protein: 0.7, carbs: 11, fat: 0.3, fiber: 2.5 },
+    ]
+  },
+  {
+    icon: "🍳",
+    title: "3 Scrambled Eggs & Toast",
+    kcal: 390,
+    p: 24,
+    items: [
+      { name: "Scrambled Whole Eggs (3)", qty: 3, unit: "large", calories: 220, protein: 18, carbs: 2, fat: 15, fiber: 0 },
+      { name: "Multigrain Sourdough Toast", qty: 2, unit: "slices", calories: 170, protein: 6, carbs: 30, fat: 2, fiber: 4 },
+    ]
+  }
+];
+
+function LiveCameraView({ onCapture, onClose }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [facingMode, setFacingMode] = useState("environment");
+  const [cameraError, setCameraError] = useState(null);
+  const [flash, setFlash] = useState(false);
+
+  const stopStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  const startStream = useCallback(async (mode) => {
+    stopStream();
+    setCameraError(null);
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Live camera is not supported in this browser.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: mode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.warn("Camera stream error:", err);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setCameraError("Camera permission denied. Please allow camera in browser settings.");
+      } else {
+        setCameraError("Unable to access camera on this device.");
+      }
+    }
+  }, [stopStream]);
+
+  useEffect(() => {
+    startStream(facingMode);
+    return () => stopStream();
+  }, [facingMode, startStream, stopStream]);
+
+  const snap = () => {
+    if (!videoRef.current) return;
+    setFlash(true);
+    setTimeout(() => setFlash(false), 200);
+    try {
+      const vid = videoRef.current;
+      const canvas = document.createElement("canvas");
+      canvas.width = vid.videoWidth || 640;
+      canvas.height = vid.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
+      if (facingMode === "user") {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+      stopStream();
+      onCapture(dataUrl);
+    } catch (e) {
+      console.error("Frame capture error:", e);
+    }
+  };
+
+  const toggleCamera = () => {
+    setFacingMode((m) => (m === "environment" ? "user" : "environment"));
+  };
+
+  return (
+    <div style={{
+      position: "relative",
+      borderRadius: 18,
+      overflow: "hidden",
+      background: "#080F0D",
+      minHeight: 320,
+      width: "100%",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+      border: "1px solid var(--line)"
+    }}>
+      {cameraError ? (
+        <div style={{ padding: 24, textAlign: "center", color: "#FFF" }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>📷</div>
+          <div style={{ fontSize: 13, color: "#FFA896", marginBottom: 16 }}>{cameraError}</div>
+          <button
+            type="button"
+            className="np-btn np-btn-ghost"
+            onClick={onClose}
+            style={{ color: "#FFF", borderColor: "rgba(255,255,255,0.3)" }}
+          >
+            Close &amp; Upload Photo
+          </button>
+        </div>
+      ) : (
+        <>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              width: "100%",
+              height: 320,
+              objectFit: "cover",
+              transform: facingMode === "user" ? "scaleX(-1)" : "none"
+            }}
+          />
+
+          {flash && (
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              background: "#FFF",
+              zIndex: 35,
+              opacity: 0.85
+            }} />
+          )}
+
+          {/* Viewfinder Reticle Frame */}
+          <div style={{
+            position: "absolute",
+            inset: 24,
+            border: "2px dashed rgba(95, 227, 179, 0.65)",
+            borderRadius: 16,
+            pointerEvents: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}>
+            <div style={{
+              background: "rgba(0,0,0,0.65)",
+              color: "#5FE3B3",
+              fontSize: 11.5,
+              fontWeight: 700,
+              padding: "4px 12px",
+              borderRadius: 20,
+              backdropFilter: "blur(6px)",
+              letterSpacing: "0.2px"
+            }}>
+              JazzCoach AI • Point at meal
+            </div>
+          </div>
+
+          {/* Controls Bar */}
+          <div style={{
+            position: "absolute",
+            bottom: 16,
+            left: 0,
+            right: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-around",
+            padding: "0 24px",
+            zIndex: 25
+          }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: "rgba(0,0,0,0.65)",
+                border: "1px solid rgba(255,255,255,0.25)",
+                color: "#FFF",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer"
+              }}
+              title="Close Camera"
+            >
+              <X size={20} />
+            </button>
+
+            <button
+              type="button"
+              onClick={snap}
+              style={{
+                width: 70,
+                height: 70,
+                borderRadius: "50%",
+                background: "#FFF",
+                border: "4px solid #1F5D4C",
+                boxShadow: "0 0 0 3px rgba(255,255,255,0.8), 0 6px 18px rgba(0,0,0,0.45)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer"
+              }}
+              title="Snap Meal"
+            >
+              <div style={{
+                width: 52,
+                height: 52,
+                borderRadius: "50%",
+                background: "var(--brand)"
+              }} />
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleCamera}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: "rgba(0,0,0,0.65)",
+                border: "1px solid rgba(255,255,255,0.25)",
+                color: "#FFF",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer"
+              }}
+              title="Switch Camera"
+            >
+              <RefreshCw size={18} />
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSetSubtab }) {
   const [localSubtab, setLocalSubtab] = useState("scan"); // scan | voice | barcode | search
   const subtab = parentSubtab || localSubtab;
@@ -3526,11 +3861,12 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
   const [previewUrl, setPreviewUrl] = useState(null);
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState("");
+  const [showLiveCamera, setShowLiveCamera] = useState(false);
+  const [scanNotice, setScanNotice] = useState(null);
   const fileRef = useRef(null);
-  const cameraRef = useRef(null);
 
   async function processBase64(base64Data, mimeType = "image/jpeg") {
-    // 1. Instantly compress oversized camera capture via offscreen HTML5 canvas
+    setScanNotice(null);
     const compressed = await compressImageBase64(base64Data);
     setPreviewUrl(compressed);
     setStep("loading");
@@ -3563,12 +3899,12 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
         })));
         setStep("review");
       } else {
-        alert("JazzCoach could not detect food in this photo. Please try a clearer picture or search below.");
+        setScanNotice("JazzCoach could not clearly identify food items in this photo. Try taking a clearer photo or search below.");
         setStep("idle");
       }
     } catch (err) {
       console.error("JazzCoach Vision scan failed:", err);
-      alert("Failed to analyze image with JazzCoach AI. Check network or try again.");
+      setScanNotice("Could not analyze meal: " + (err.message || "Network issue") + ". Please try again.");
       setStep("idle");
     }
   }
@@ -3642,6 +3978,31 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
       <div className="np-h1" style={{ marginTop: 16 }}>Smart Food Log</div>
       <div className="np-sub">Photo vision, voice speech, barcode, or manual search</div>
 
+      {scanNotice && (
+        <div style={{
+          background: "#2A1815",
+          border: "1px solid #FF6B47",
+          color: "#FFA896",
+          borderRadius: 14,
+          padding: "12px 16px",
+          marginTop: 12,
+          fontSize: 13,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10
+        }}>
+          <span>{scanNotice}</span>
+          <button
+            type="button"
+            onClick={() => setScanNotice(null)}
+            style={{ background: "none", border: "none", color: "#FFA896", cursor: "pointer", display: "flex" }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {step === "idle" && (
         <div className="np-subtabs-row">
           <button className={`np-subtab-btn ${subtab === "scan" ? "active" : ""}`} onClick={() => setSubtab("scan")}>
@@ -3673,30 +4034,89 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
 
       {step === "idle" && subtab === "scan" && (
         <>
-          <div className="np-drop">
-            <div className="np-drop-ico"><Camera size={24} /></div>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Snap or upload a meal photo</div>
-            <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 14 }}>JPG or PNG &mdash; Instant photo analysis with JazzCoach AI</div>
-
-            {/* Hidden native camera capture for mobile phones */}
-            <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={handleFile} />
-            {/* Hidden file uploader for photo gallery */}
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFile} />
-
-            <div style={{ display: "flex", gap: 10, width: "100%", justifyContent: "center" }}>
-              <button className="np-btn np-btn-accent" style={{ flex: 1, padding: "12px 14px" }} onClick={() => cameraRef.current && cameraRef.current.click()}>
-                <Camera size={16} /> Take Photo
-              </button>
-              <button className="np-btn np-btn-ghost" style={{ flex: 1, padding: "12px 14px" }} onClick={() => fileRef.current && fileRef.current.click()}>
-                <Upload size={16} /> Gallery
-              </button>
+          {showLiveCamera ? (
+            <div style={{ marginBottom: 14 }}>
+              <LiveCameraView
+                onCapture={(dataUrl) => {
+                  setShowLiveCamera(false);
+                  processBase64(dataUrl, "image/jpeg");
+                }}
+                onClose={() => setShowLiveCamera(false)}
+              />
             </div>
-          </div>
+          ) : (
+            <div className="np-drop">
+              <div className="np-drop-ico"><Camera size={24} /></div>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Snap or upload a meal photo</div>
+              <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 14 }}>JPG or PNG &mdash; Instant photo analysis with JazzCoach AI</div>
+
+              {/* Hidden file uploader for photo gallery */}
+              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFile} />
+
+              <div style={{ display: "flex", gap: 10, width: "100%", justifyContent: "center" }}>
+                <button
+                  type="button"
+                  className="np-btn np-btn-accent"
+                  style={{ flex: 1, padding: "12px 14px", justifyContent: "center" }}
+                  onClick={() => setShowLiveCamera(true)}
+                >
+                  <Camera size={16} /> Live AI Camera
+                </button>
+                <button
+                  type="button"
+                  className="np-btn np-btn-ghost"
+                  style={{ flex: 1, padding: "12px 14px", justifyContent: "center" }}
+                  onClick={() => fileRef.current && fileRef.current.click()}
+                >
+                  <Upload size={16} /> Choose Photo
+                </button>
+              </div>
+
+              {/* 1-Tap Sample Meals to easily test */}
+              <div style={{ marginTop: 18, width: "100%", borderTop: "1px dashed var(--line)", paddingTop: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--ink-faint)", marginBottom: 10, textAlign: "center" }}>
+                  Or test AI with sample meals
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {SAMPLE_TEST_MEALS.map((sm, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      style={{
+                        margin: 0,
+                        padding: "10px 12px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        cursor: "pointer",
+                        borderRadius: 12,
+                        border: "1px solid var(--line)",
+                        background: "var(--surface)",
+                        textAlign: "left",
+                        transition: "transform 0.1s ease"
+                      }}
+                      onClick={() => {
+                        setPreviewUrl(null);
+                        setItems(sm.items.map((it, i) => ({ ...it, id: i, baseQty: it.qty, checked: true })));
+                        setStep("review");
+                      }}
+                    >
+                      <span style={{ fontSize: 20 }}>{sm.icon}</span>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 11.5, color: "var(--ink)" }}>{sm.title}</div>
+                        <div style={{ fontSize: 10.5, color: "var(--brand)", fontWeight: 600 }}>{sm.kcal} kcal • {sm.p}g P</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="np-card" style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", background: "var(--brand-soft)", border: "1px solid #C4DCD3", padding: "10px 14px" }}>
             <Sparkles size={15} style={{ flexShrink: 0, color: "var(--brand)" }} />
             <div style={{ fontSize: 12.5, color: "var(--brand)", fontWeight: 700 }}>
-              Powered by JazzCoach AI
+              Powered by JazzCoach Vision AI (Gemini 3.6 Flash)
             </div>
           </div>
         </>
@@ -3763,6 +4183,7 @@ function FoodSearch({ query, setQuery, addMeal, remaining }) {
 
   const [showAddCustom, setShowAddCustom] = useState(false);
   const [customName, setCustomName] = useState("");
+  const [customError, setCustomError] = useState(null);
   const [customCals, setCustomCals] = useState("");
   const [customP, setCustomP] = useState("");
   const [customC, setCustomC] = useState("");
@@ -3800,9 +4221,10 @@ function FoodSearch({ query, setQuery, addMeal, remaining }) {
 
   const handleCreateCustom = (andLog = true) => {
     if (!customName.trim()) {
-      alert("Please enter a food or recipe name.");
+      setCustomError("Please enter a food or recipe name.");
       return;
     }
+    setCustomError(null);
     const cals = Number(customCals) || 0;
     const p = Number(customP) || 0;
     const c = Number(customC) || 0;
@@ -4038,6 +4460,11 @@ function FoodSearch({ query, setQuery, addMeal, remaining }) {
           <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
             <Sparkles size={14} color="var(--brand)" /> Add Custom Food / Home Recipe
           </div>
+          {customError && (
+            <div style={{ background: "#FEE2E2", color: "#991B1B", border: "1px solid #FCA5A5", borderRadius: 8, padding: "6px 10px", fontSize: 12, marginBottom: 8 }}>
+              {customError}
+            </div>
+          )}
           <input
             placeholder="Food name (e.g. Maa ki Dal, Paneer Paratha)"
             style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line)", marginBottom: 8, fontSize: 13 }}
