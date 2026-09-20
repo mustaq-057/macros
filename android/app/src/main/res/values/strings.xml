@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NutriPulse</string>
+    <string name="title_activity_main">NutriPulse</string>
+    <string name="package_name">com.nutripulse.app</string>
+    <string name="custom_url_scheme">com.nutripulse.app</string>
+</resources>
