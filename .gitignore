@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables - DO NOT commit secrets
+.env
+.env.local
+.env.production
+
+# Vite cache
+.vite/
+*.timestamp-*.mjs
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Capacitor
+android/
+ios/
+
+# Logs
+*.log
+npm-debug.log*
+mobile/
