@@ -3865,48 +3865,94 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
   const [query, setQuery] = useState("");
   const [showLiveCamera, setShowLiveCamera] = useState(false);
   const [scanNotice, setScanNotice] = useState(null);
+  const [aiMealHint, setAiMealHint] = useState("");
+  const [isCalculatingHint, setIsCalculatingHint] = useState(false);
   const fileRef = useRef(null);
+
+  const handleAiHintCalculate = async () => {
+    if (!aiMealHint.trim()) return;
+    setIsCalculatingHint(true);
+    try {
+      const parsed = await parseSpokenMeal(aiMealHint.trim());
+      if (parsed && parsed.length > 0) {
+        setItems(parsed.map((it, i) => {
+          const q = Number(it.qty);
+          const safeQty = (!isNaN(q) && q > 0) ? q : 1;
+          return {
+            id: i,
+            name: it.name || "Meal Item",
+            qty: safeQty,
+            baseQty: safeQty,
+            unit: it.unit || (safeQty > 1 ? "items" : "serving"),
+            calories: Math.round(Number(it.calories) || 0),
+            protein: Math.round((Number(it.protein) || 0) * 10) / 10,
+            carbs: Math.round((Number(it.carbs) || 0) * 10) / 10,
+            fat: Math.round((Number(it.fat) || 0) * 10) / 10,
+            fiber: Math.round((Number(it.fiber) || 0) * 10) / 10,
+            checked: true,
+            photoUrl: previewUrl,
+          };
+        }));
+        setScanNotice(null);
+        setAiMealHint("");
+        setStep("review");
+      } else {
+        setScanNotice("❌ Could not parse meal description. Please try with details like '2 boiled eggs'.");
+      }
+    } catch (err) {
+      setScanNotice("❌ AI calculation failed: " + (err.message || "Network error"));
+    } finally {
+      setIsCalculatingHint(false);
+    }
+  };
 
   async function processBase64(base64Data, mimeType = "image/jpeg") {
     setScanNotice(null);
     const compressed = await compressImageBase64(base64Data);
     setPreviewUrl(compressed);
     setStep("loading");
+
+    // Upload to Cloudinary in parallel without delaying Gemini Vision
     let cloudUrl = null;
-    try {
-      cloudUrl = await uploadImageToCloudinary(compressed);
-      if (cloudUrl) {
-        setPreviewUrl(cloudUrl);
-      }
-    } catch (cErr) {
-      console.warn("Cloudinary upload note:", cErr.message);
-    }
+    const cloudPromise = uploadImageToCloudinary(compressed)
+      .then((url) => {
+        cloudUrl = url;
+        if (url) setPreviewUrl(url);
+      })
+      .catch((cErr) => console.warn("Cloudinary note:", cErr.message));
 
     try {
-      const detected = await analyzeFoodImage(compressed, "image/jpeg");
+      const detected = await analyzeFoodImage(compressed, mimeType || "image/jpeg");
+      // Allow fast Cloudinary promise a brief moment
+      await Promise.race([cloudPromise, new Promise((r) => setTimeout(r, 1000))]);
+
       if (detected && detected.length > 0) {
-        setItems(detected.map((it, i) => ({
-          id: i,
-          name: it.name,
-          qty: Number(it.qty) || 100,
-          baseQty: Number(it.qty) || 100,
-          unit: it.unit || "g",
-          calories: Math.round(Number(it.calories) || 0),
-          protein: Math.round((Number(it.protein) || 0) * 10) / 10,
-          carbs: Math.round((Number(it.carbs) || 0) * 10) / 10,
-          fat: Math.round((Number(it.fat) || 0) * 10) / 10,
-          fiber: Math.round((Number(it.fiber) || 0) * 10) / 10,
-          checked: true,
-          photoUrl: cloudUrl,
-        })));
+        setItems(detected.map((it, i) => {
+          const q = Number(it.qty);
+          const safeQty = (!isNaN(q) && q > 0) ? q : 1;
+          return {
+            id: i,
+            name: it.name || "Detected Food",
+            qty: safeQty,
+            baseQty: safeQty,
+            unit: it.unit || (safeQty > 1 ? "items" : "serving"),
+            calories: Math.round(Number(it.calories) || 0),
+            protein: Math.round((Number(it.protein) || 0) * 10) / 10,
+            carbs: Math.round((Number(it.carbs) || 0) * 10) / 10,
+            fat: Math.round((Number(it.fat) || 0) * 10) / 10,
+            fiber: Math.round((Number(it.fiber) || 0) * 10) / 10,
+            checked: true,
+            photoUrl: cloudUrl || compressed,
+          };
+        }));
         setStep("review");
       } else {
-        setScanNotice("❌ Food not detected — JazzCoach could not identify any food items in this photo. Please take a clearer, well-lit photo of your meal and try again.");
+        setScanNotice("❌ Food not detected in photo. Tell AI what this meal was & let Gemini calculate exact macros:");
         setStep("idle");
       }
     } catch (err) {
       console.error("JazzCoach Vision scan failed:", err);
-      setScanNotice("❌ Food not detected — " + (err.message || "Analysis failed") + ". Please retake the photo and try again.");
+      setScanNotice("❌ Food scan failed (" + (err.message || "Analysis error") + "). Tell AI what this meal was & let Gemini calculate exact macros:");
       setStep("idle");
     }
   }
@@ -3924,27 +3970,33 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
 
   function handleVoiceParsed(parsed) {
     setPreviewUrl(null);
-    setItems(parsed.map((it, i) => ({
-      id: i,
-      name: it.name,
-      qty: Number(it.qty) || 100,
-      baseQty: Number(it.qty) || 100,
-      unit: it.unit || "g",
-      calories: Math.round(Number(it.calories) || 0),
-      protein: Math.round((Number(it.protein) || 0) * 10) / 10,
-      carbs: Math.round((Number(it.carbs) || 0) * 10) / 10,
-      fat: Math.round((Number(it.fat) || 0) * 10) / 10,
-      fiber: Math.round((Number(it.fiber) || 0) * 10) / 10,
-      checked: true,
-    })));
+    setItems(parsed.map((it, i) => {
+      const q = Number(it.qty);
+      const safeQty = (!isNaN(q) && q > 0) ? q : 1;
+      return {
+        id: i,
+        name: it.name || "Spoken Food",
+        qty: safeQty,
+        baseQty: safeQty,
+        unit: it.unit || (safeQty > 1 ? "items" : "serving"),
+        calories: Math.round(Number(it.calories) || 0),
+        protein: Math.round((Number(it.protein) || 0) * 10) / 10,
+        carbs: Math.round((Number(it.carbs) || 0) * 10) / 10,
+        fat: Math.round((Number(it.fat) || 0) * 10) / 10,
+        fiber: Math.round((Number(it.fiber) || 0) * 10) / 10,
+        checked: true,
+      };
+    }));
     setStep("review");
   }
 
   function updateQty(id, delta) {
     setItems((prev) => prev.map((it) => {
       if (it.id !== id) return it;
-      const factor = Math.max(0.25, (it.qty + delta) / it.baseQty);
-      const newQty = Math.max(it.unit === "g" ? 10 : 0.25, it.qty + delta);
+      const isCountBased = ["eggs", "egg", "pcs", "piece", "pieces", "slices", "slice", "items", "servings", "serving"].includes(String(it.unit).toLowerCase());
+      const minVal = isCountBased ? 0.5 : (it.unit === "g" ? 10 : 0.25);
+      const stepDelta = delta !== undefined ? delta : (isCountBased ? 1 : (it.unit === "g" ? 25 : 0.5));
+      const newQty = Math.max(minVal, it.qty + stepDelta);
       return { ...it, qty: Math.round(newQty * 10) / 10 };
     }));
   }
@@ -3955,11 +4007,14 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
 
   function confirmSave() {
     items.filter((i) => i.checked).forEach((it) => {
-      const scale = it.qty / it.baseQty;
+      const scale = it.baseQty > 0 ? (it.qty / it.baseQty) : 1;
+      const unitStr = ["g", "ml"].includes(it.unit) ? `${it.qty}${it.unit}` : `${it.qty} ${it.unit}`;
       addMeal({
-        name: `${it.name} (${it.qty}${it.unit === "g" ? "g" : "x " + it.unit})`,
-        calories: Math.round(it.calories * scale), protein: Math.round(it.protein * scale * 10) / 10,
-        carbs: Math.round(it.carbs * scale * 10) / 10, fat: Math.round(it.fat * scale * 10) / 10,
+        name: `${it.name} (${unitStr})`,
+        calories: Math.round(it.calories * scale),
+        protein: Math.round(it.protein * scale * 10) / 10,
+        carbs: Math.round(it.carbs * scale * 10) / 10,
+        fat: Math.round(it.fat * scale * 10) / 10,
         fiber: Math.round(it.fiber * scale * 10) / 10,
         photoUrl: it.photoUrl || null,
       });
@@ -3968,10 +4023,12 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
   }
 
   const itemTotals = items.filter((i) => i.checked).reduce((a, it) => {
-    const scale = it.qty / it.baseQty;
+    const scale = it.baseQty > 0 ? (it.qty / it.baseQty) : 1;
     return {
-      calories: a.calories + it.calories * scale, protein: a.protein + it.protein * scale,
-      carbs: a.carbs + it.carbs * scale, fat: a.fat + it.fat * scale,
+      calories: a.calories + it.calories * scale,
+      protein: a.protein + it.protein * scale,
+      carbs: a.carbs + it.carbs * scale,
+      fat: a.fat + it.fat * scale,
     };
   }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
@@ -3986,22 +4043,47 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
           border: "1px solid #FF6B47",
           color: "#FFA896",
           borderRadius: 14,
-          padding: "12px 16px",
+          padding: "14px 16px",
           marginTop: 12,
           fontSize: 13,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 10
         }}>
-          <span>{scanNotice}</span>
-          <button
-            type="button"
-            onClick={() => setScanNotice(null)}
-            style={{ background: "none", border: "none", color: "#FFA896", cursor: "pointer", display: "flex" }}
-          >
-            <X size={16} />
-          </button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <span>{scanNotice}</span>
+            <button
+              type="button"
+              onClick={() => setScanNotice(null)}
+              style={{ background: "none", border: "none", color: "#FFA896", cursor: "pointer", display: "flex" }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+            <input
+              type="text"
+              placeholder="E.g. 2 whole boiled eggs, 1 scoop whey"
+              value={aiMealHint}
+              onChange={(e) => setAiMealHint(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAiHintCalculate(); }}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: "1px solid #FF6B47",
+                background: "#1E1210",
+                color: "#FFF",
+                fontSize: 12.5
+              }}
+            />
+            <button
+              type="button"
+              disabled={isCalculatingHint}
+              onClick={handleAiHintCalculate}
+              className="np-btn np-btn-accent"
+              style={{ padding: "8px 14px", fontSize: 12, whiteSpace: "nowrap" }}
+            >
+              {isCalculatingHint ? "Calculating..." : "⚡ Calculate with AI"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -4118,7 +4200,7 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
           <div className="np-card" style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", background: "var(--brand-soft)", border: "1px solid #C4DCD3", padding: "10px 14px" }}>
             <Sparkles size={15} style={{ flexShrink: 0, color: "var(--brand)" }} />
             <div style={{ fontSize: 12.5, color: "var(--brand)", fontWeight: 700 }}>
-              Powered by JazzCoach Vision AI (Gemini 3.6 Flash)
+              Powered by JazzCoach Vision AI (Gemini 3.5 &amp; Flash)
             </div>
           </div>
         </>
@@ -4137,27 +4219,34 @@ function ScanLog({ addMeal, remaining, subtab: parentSubtab, setSubtab: parentSe
         <>
           {previewUrl && <div className="np-scan-preview"><img src={previewUrl} alt="meal" /></div>}
           <div className="np-sub" style={{ marginBottom: 10 }}>Review detected items — adjust portions or remove before saving</div>
-          {items.map((it) => (
-            <div className="np-item-card" key={it.id} style={{ opacity: it.checked ? 1 : 0.45 }}>
-              <div className="np-item-top">
-                <div className="np-item-name">{it.name}</div>
-                <button onClick={() => toggleItem(it.id)} style={{ background: "none", border: "none", cursor: "pointer", color: it.checked ? "var(--fat)" : "var(--ink-faint)" }}>
-                  {it.checked ? <Check size={18} /> : <Plus size={18} />}
-                </button>
+          {items.map((it) => {
+            const scale = it.baseQty > 0 ? (it.qty / it.baseQty) : 1;
+            const isCount = ["eggs", "egg", "pcs", "piece", "pieces", "slices", "slice", "items"].includes(String(it.unit).toLowerCase());
+            return (
+              <div className="np-item-card" key={it.id} style={{ opacity: it.checked ? 1 : 0.45 }}>
+                <div className="np-item-top">
+                  <div className="np-item-name">{it.name}</div>
+                  <button onClick={() => toggleItem(it.id)} style={{ background: "none", border: "none", cursor: "pointer", color: it.checked ? "var(--fat)" : "var(--ink-faint)" }}>
+                    {it.checked ? <Check size={18} /> : <Plus size={18} />}
+                  </button>
+                </div>
+                <div className="np-stepper">
+                  <button onClick={() => updateQty(it.id, isCount ? -1 : (it.unit === "g" ? -25 : -0.5))}>&minus;</button>
+                  <span style={{ fontWeight: 700, fontSize: 13, minWidth: 70, textAlign: "center" }}>{it.qty} {it.unit}</span>
+                  <button onClick={() => updateQty(it.id, isCount ? 1 : (it.unit === "g" ? 25 : 0.5))}>+</button>
+                  <span style={{ marginLeft: "auto", fontFamily: "'Oswald',sans-serif", fontWeight: 600, fontSize: 15 }}>{Math.round(it.calories * scale)} kcal</span>
+                </div>
+                <div className="np-macro-tags">
+                  <span className="np-tag" style={{ background: "var(--protein-soft)", color: "var(--protein)" }}>P {Math.round(it.protein * scale * 10) / 10}g</span>
+                  <span className="np-tag" style={{ background: "var(--carbs-soft)", color: "#A9701C" }}>C {Math.round(it.carbs * scale * 10) / 10}g</span>
+                  <span className="np-tag" style={{ background: "var(--fat-soft)", color: "var(--fat)" }}>F {Math.round(it.fat * scale * 10) / 10}g</span>
+                  {it.fiber > 0 && (
+                    <span className="np-tag" style={{ background: "#EFE8FA", color: "var(--fiber)" }}>Fiber {Math.round(it.fiber * scale * 10) / 10}g</span>
+                  )}
+                </div>
               </div>
-              <div className="np-stepper">
-                <button onClick={() => updateQty(it.id, it.unit === "g" ? -10 : -0.5)}>&minus;</button>
-                <span style={{ fontWeight: 700, fontSize: 13, minWidth: 64, textAlign: "center" }}>{it.qty}{it.unit === "g" ? "g" : ` ${it.unit}`}</span>
-                <button onClick={() => updateQty(it.id, it.unit === "g" ? 10 : 0.5)}>+</button>
-                <span style={{ marginLeft: "auto", fontFamily: "'Oswald',sans-serif", fontWeight: 600, fontSize: 15 }}>{Math.round(it.calories * (it.qty / it.baseQty))} kcal</span>
-              </div>
-              <div className="np-macro-tags">
-                <span className="np-tag" style={{ background: "var(--protein-soft)", color: "var(--protein)" }}>P {Math.round(it.protein * (it.qty / it.baseQty))}g</span>
-                <span className="np-tag" style={{ background: "var(--carbs-soft)", color: "#A9701C" }}>C {Math.round(it.carbs * (it.qty / it.baseQty))}g</span>
-                <span className="np-tag" style={{ background: "var(--fat-soft)", color: "var(--fat)" }}>F {Math.round(it.fat * (it.qty / it.baseQty))}g</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
           <div className="np-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <div style={{ fontSize: 11.5, color: "var(--ink-soft)", fontWeight: 700, textTransform: "uppercase" }}>Meal total</div>
@@ -4447,6 +4536,61 @@ function FoodSearch({ query, setQuery, addMeal, remaining }) {
         {loadingApi && <RefreshCw size={14} className="spin" style={{ color: "var(--brand)", animation: "spin 1s linear infinite" }} />}
       </div>
 
+      {query.trim().length > 1 && (
+        <button
+          type="button"
+          disabled={loadingApi}
+          onClick={async () => {
+            setLoadingApi(true);
+            try {
+              const parsed = await parseSpokenMeal(query.trim());
+              if (parsed && parsed.length > 0) {
+                const first = parsed[0];
+                handlePick({
+                  name: first.name,
+                  calories: Math.round(Number(first.calories) || 0),
+                  protein: Math.round((Number(first.protein) || 0) * 10) / 10,
+                  carbs: Math.round((Number(first.carbs) || 0) * 10) / 10,
+                  fat: Math.round((Number(first.fat) || 0) * 10) / 10,
+                  fiber: Math.round((Number(first.fiber) || 0) * 10) / 10,
+                  isLive: false,
+                  isCustom: true,
+                });
+              }
+            } catch (e) {
+              console.error("AI calculate failed:", e);
+            } finally {
+              setLoadingApi(false);
+            }
+          }}
+          className="np-card"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "12px 14px",
+            marginBottom: 12,
+            background: "linear-gradient(135deg, rgba(29, 185, 84, 0.12), rgba(0, 168, 150, 0.06))",
+            border: "1.5px solid var(--brand)",
+            borderRadius: 14,
+            cursor: "pointer",
+            textAlign: "left",
+            width: "100%",
+            transition: "transform 0.15s ease",
+          }}
+        >
+          <Sparkles size={20} style={{ color: "var(--brand)", flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>
+              ⚡ Calculate &ldquo;{query}&rdquo; with Gemini AI
+            </div>
+            <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>
+              Instant exact calories, protein, carbs &amp; fat calculated by LLM
+            </div>
+          </div>
+        </button>
+      )}
+
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <button
           className="np-btn np-btn-ghost np-btn-sm"
@@ -4467,12 +4611,41 @@ function FoodSearch({ query, setQuery, addMeal, remaining }) {
               {customError}
             </div>
           )}
-          <input
-            placeholder="Food name (e.g. Maa ki Dal, Paneer Paratha)"
-            style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line)", marginBottom: 8, fontSize: 13 }}
-            value={customName}
-            onChange={(e) => setCustomName(e.target.value)}
-          />
+          <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <input
+              placeholder="Food name (e.g. 2 Boiled Eggs, Paneer Paratha)"
+              style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line)", fontSize: 13 }}
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+            />
+            <button
+              type="button"
+              className="np-btn np-btn-ghost np-btn-sm"
+              style={{ whiteSpace: "nowrap", padding: "8px 10px", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}
+              onClick={async () => {
+                if (!customName.trim()) {
+                  setCustomError("Enter a food name first to auto-calculate.");
+                  return;
+                }
+                setCustomError(null);
+                try {
+                  const parsed = await parseSpokenMeal(customName.trim());
+                  if (parsed && parsed.length > 0) {
+                    const item = parsed[0];
+                    setCustomCals(String(Math.round(item.calories || 0)));
+                    setCustomP(String(Math.round((item.protein || 0) * 10) / 10));
+                    setCustomC(String(Math.round((item.carbs || 0) * 10) / 10));
+                    setCustomF(String(Math.round((item.fat || 0) * 10) / 10));
+                    setCustomFib(String(Math.round((item.fiber || 0) * 10) / 10));
+                  }
+                } catch (e) {
+                  setCustomError("AI could not calculate: " + (e.message || "Failed"));
+                }
+              }}
+            >
+              <Sparkles size={13} color="var(--brand)" /> Auto-Fill
+            </button>
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
             <div>
               <label style={{ fontSize: 11, color: "var(--ink-soft)" }}>Calories (kcal)</label>

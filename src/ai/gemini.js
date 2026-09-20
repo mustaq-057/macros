@@ -7,12 +7,58 @@ export const GEMINI_API_KEY = (typeof import.meta !== 'undefined' && import.meta
   : ((typeof process !== 'undefined' && process.env && (process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY)) || (typeof localStorage !== 'undefined' && localStorage.getItem('jazz_gemini_api_key')) || _FALLBACK_KEY);
 
 const MODELS = [
-  'gemini-3.6-flash',
-  'gemini-flash-latest',
-  'gemini-2.5-flash',
+  'gemini-3.5-flash',
   'gemini-3-flash-preview',
-  'gemini-2.5-flash-lite'
+  'gemini-3.1-flash-lite',
+  'gemini-flash-latest',
+  'gemini-3.6-flash',
+  'gemini-3.7-flash',
 ];
+
+/**
+ * Robust JSON Array Extractor from Gemini output
+ */
+function extractJsonArray(text) {
+  if (!text || typeof text !== 'string') return [];
+  try {
+    const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) return sanitizeFoodItems(parsed);
+    if (parsed && Array.isArray(parsed.items)) return sanitizeFoodItems(parsed.items);
+    if (parsed && Array.isArray(parsed.foods)) return sanitizeFoodItems(parsed.foods);
+    if (parsed && parsed.name) return sanitizeFoodItems([parsed]);
+  } catch (e) {
+    // Attempt regex extraction of array
+    const match = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[0]);
+        if (Array.isArray(parsed)) return sanitizeFoodItems(parsed);
+      } catch (err) {}
+    }
+  }
+  return [];
+}
+
+function sanitizeFoodItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter(it => it && typeof it === 'object' && it.name)
+    .map(it => {
+      const q = Number(it.qty);
+      const qty = (!isNaN(q) && q > 0) ? q : 1;
+      return {
+        name: String(it.name).trim(),
+        qty,
+        unit: String(it.unit || (qty > 1 ? 'items' : 'serving')).trim(),
+        calories: Math.max(0, Math.round(Number(it.calories) || 0)),
+        protein: Math.max(0, Math.round((Number(it.protein) || 0) * 10) / 10),
+        carbs: Math.max(0, Math.round((Number(it.carbs) || 0) * 10) / 10),
+        fat: Math.max(0, Math.round((Number(it.fat) || 0) * 10) / 10),
+        fiber: Math.max(0, Math.round((Number(it.fiber) || 0) * 10) / 10),
+      };
+    });
+}
 
 /**
  * Helper to call Gemini API with model fallback
@@ -62,28 +108,37 @@ async function callGemini(contents, generationConfig = {}) {
  * Analyze an uploaded food photo using Gemini Vision
  */
 export async function analyzeFoodImage(base64Data, mimeType = 'image/jpeg') {
-  // Strip data URL prefix if present
-  const rawBase64 = base64Data.replace(/^data:image\/[a-zA-Z]+;base64,/, '');
-
-  const prompt = `You are an expert nutritionist and vision model.
-Analyze this meal photo carefully. Identify every distinct food item on the plate, bowl, or container.
-Estimate reasonable portion sizes, calories, and macronutrient breakdowns in grams.
-
-Return ONLY a valid JSON array of objects with no markdown code fences and no extra text.
-Each object MUST have this schema:
-[
-  {
-    "name": "Food item name (e.g. Grilled Chicken Breast)",
-    "qty": 150,
-    "unit": "g",
-    "calories": 248,
-    "protein": 46,
-    "carbs": 0,
-    "fat": 5.4,
-    "fiber": 0
+  let rawBase64 = base64Data;
+  let actualMime = mimeType || 'image/jpeg';
+  if (base64Data.includes('base64,')) {
+    const parts = base64Data.split('base64,');
+    rawBase64 = parts[1].trim();
+    const headerMatch = parts[0].match(/data:([^;]+);/);
+    if (headerMatch && headerMatch[1]) {
+      actualMime = headerMatch[1];
+    }
   }
-]
-If the photo does not clearly contain food, return an empty array [].`;
+  rawBase64 = rawBase64.replace(/\s+/g, '');
+
+  const prompt = `You are an expert AI nutritionist and computer vision model powered by Google Gemini.
+Examine this food or meal photo with full, unrestricted visual intelligence and deep nutritional science.
+Identify EVERY edible item, ingredient, food, drink, or meal present in the photo with high precision and provide exact macronutrient calculations.
+
+CRITICAL RULES:
+1. Count and identify exact items and quantities:
+   - For eggs (whether boiled, fried, sunny-side up, poached, scrambled, raw, or in a dish): identify the exact count (e.g., "2 Boiled Eggs" or "2 Fried Eggs"), qty: 2, unit: "eggs", and calculate standard nutritional values (approx 140-155 kcal, 12.5-13.5g protein, 1g carbs, 10-11g fat).
+   - Recognize raw ingredients, home-cooked dishes, Indian cuisine (roti, dal, paneer, chicken curry, biryani, rice, chana, dahi, sabzi), Asian cuisine, gym fitness meals (whey protein shakes, chicken breast, oats, eggs), snacks, beverages, and fruits.
+2. Calculate the exact, scientifically grounded macros:
+   - "name": Descriptive, specific food name (e.g. "2 Boiled Eggs", "Grilled Chicken Breast", "Whole Wheat Roti")
+   - "qty": number (e.g. 2 or 150)
+   - "unit": unit of measure (e.g. "eggs", "pcs", "g", "slices", "cups", "ml", "bowls")
+   - "calories": exact calories in kcal (integer)
+   - "protein": exact protein in grams (number)
+   - "carbs": exact carbohydrates in grams (number)
+   - "fat": exact fat in grams (number)
+   - "fiber": dietary fiber in grams (number)
+3. Return ONLY a valid JSON array of objects with the above schema. No markdown code fences.
+4. Do NOT reduce your capabilities or be overly strict. If there is ANY food, drink, snack, or edible ingredient visible, identify it and calculate its exact macros. Only return an empty array [] if the image is 100% non-food (such as a laptop, shoe, chair, or text document).`;
 
   const contents = [
     {
@@ -91,7 +146,7 @@ If the photo does not clearly contain food, return an empty array [].`;
         { text: prompt },
         {
           inline_data: {
-            mime_type: mimeType,
+            mime_type: actualMime,
             data: rawBase64,
           },
         },
@@ -101,41 +156,37 @@ If the photo does not clearly contain food, return an empty array [].`;
 
   const text = await callGemini(contents, {
     response_mime_type: 'application/json',
-    temperature: 0.2,
+    temperature: 0.1,
   });
 
-  try {
-    const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    console.error('Failed to parse Gemini vision JSON:', text, err);
-    return [];
-  }
+  return extractJsonArray(text);
 }
 
 /**
  * Parse natural language spoken or typed meal descriptions into structured items
  */
 export async function parseSpokenMeal(transcript) {
-  const prompt = `You are an expert nutritionist and meal analyzer.
-The user spoke or typed this description of what they ate:
+  const prompt = `You are an expert nutritionist and meal analyzer powered by Google Gemini.
+The user described what they ate or drank:
 "${transcript}"
 
-Break this down into each distinct food or beverage item mentioned.
-Estimate reasonable quantities in grams or units, calories, and macronutrient breakdowns in grams.
+Break this down into each distinct food, beverage, or ingredient mentioned.
+Calculate exact quantities, meaningful units, calories, and macronutrient breakdowns in grams with high precision.
+Examples:
+- "2 eggs" or "two eggs" -> name: "2 Whole Eggs", qty: 2, unit: "eggs", calories: 144, protein: 12.6, carbs: 0.8, fat: 9.6, fiber: 0
+- "chicken breast 150g" -> name: "Grilled Chicken Breast", qty: 150, unit: "g", calories: 248, protein: 46, carbs: 0, fat: 5.4, fiber: 0
+- "paneer tikka and 2 roti" -> name: "Paneer Tikka", qty: 150, unit: "g", calories: 320, protein: 22, carbs: 6, fat: 23, fiber: 1; name: "Whole Wheat Roti", qty: 2, unit: "pcs", calories: 170, protein: 5.2, carbs: 32, fat: 2.2, fiber: 4
 
-Return ONLY a valid JSON array of objects with no markdown code fences and no extra text.
-Schema:
+Return ONLY a valid JSON array of objects with schema:
 [
   {
-    "name": "Food item name (e.g. Scrambled Eggs)",
+    "name": "Food item name",
     "qty": 2,
-    "unit": "large",
-    "calories": 140,
-    "protein": 12,
-    "carbs": 1,
-    "fat": 10,
+    "unit": "eggs",
+    "calories": 144,
+    "protein": 12.6,
+    "carbs": 0.8,
+    "fat": 9.6,
     "fiber": 0
   }
 ]
@@ -149,17 +200,10 @@ If the input does not describe any food or drink, return [].`;
 
   const text = await callGemini(contents, {
     response_mime_type: 'application/json',
-    temperature: 0.2,
+    temperature: 0.1,
   });
 
-  try {
-    const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    console.error('Failed to parse Gemini spoken meal JSON:', text, err);
-    return [];
-  }
+  return extractJsonArray(text);
 }
 
 /**
