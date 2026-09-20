@@ -1789,31 +1789,7 @@ function TopBar({ streak = 0, onReplayIntro }) {
         </div>
         <div className="np-date">{today}</div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <a
-          href="https://github.com/mustaq-057/macros/releases"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Download NutriPulse Android APK"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            background: "rgba(31, 93, 76, 0.12)",
-            border: "1px solid rgba(31, 93, 76, 0.35)",
-            borderRadius: 999,
-            padding: "4px 9px",
-            fontSize: 11,
-            fontWeight: 700,
-            color: "var(--brand)",
-            textDecoration: "none",
-            letterSpacing: "0.2px"
-          }}
-        >
-          <Download size={12} /> APK
-        </a>
-        <div className="np-streak"><Flame size={13} /> {streak} day streak</div>
-      </div>
+      <div className="np-streak"><Flame size={13} /> {streak} day streak</div>
     </div>
   );
 }
