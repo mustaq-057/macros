@@ -2570,10 +2570,10 @@ function VoiceLog({ onItemsParsed }) {
     transcriptRef.current = transcript;
   }, [transcript]);
 
-  // Audio transcription fallback using Gemini 3.6 Flash
+  // Audio transcription using Gemini Flash (primary path on Android)
   const processAudioWithGemini = async (audioBlob, mimeType) => {
     setParsing(true);
-    setParseStatus("Transcribing voice with Gemini Flash AI...");
+    setParseStatus(`🎙️ Analyzing your voice with Gemini AI (${mimeType})...`);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
@@ -2587,12 +2587,16 @@ function VoiceLog({ onItemsParsed }) {
               onItemsParsed(result.items);
               return;
             }
-          } else if (result && result.items && result.items.length > 0) {
+          }
+          if (result && result.items && result.items.length > 0) {
             onItemsParsed(result.items);
             return;
           }
+          // Nothing parsed — show error so user knows what happened
+          setErrorMsg("Gemini couldn't detect any food in your recording. Try speaking clearly, e.g. 'I ate 2 eggs and rice'.");
         } catch (e) {
-          console.warn("Gemini audio transcription inner failed:", e);
+          console.warn("Gemini audio transcription failed:", e);
+          setErrorMsg("Voice parsing failed. Please try again or type your meal below.");
         } finally {
           setParsing(false);
           setParseStatus(null);
@@ -2601,6 +2605,7 @@ function VoiceLog({ onItemsParsed }) {
       reader.readAsDataURL(audioBlob);
     } catch (err) {
       console.warn("Audio reading failed:", err);
+      setErrorMsg("Could not read audio. Please try again.");
       setParsing(false);
       setParseStatus(null);
     }
@@ -2699,17 +2704,19 @@ function VoiceLog({ onItemsParsed }) {
       return;
     }
 
-    // 2. Start MediaRecorder (Gemini audio fallback)
+    // 2. Start MediaRecorder — prefer audio/mp4 (Gemini-compatible) on Android
     if (stream) {
       try {
         audioChunksRef.current = [];
-        let mimeType = "audio/webm";
+        // Gemini accepts: audio/mp4, audio/ogg, audio/webm, audio/wav, audio/aac
+        // Android WebView: best support is audio/mp4 (AAC in M4A container)
+        // Priority: mp4 > ogg > webm > default
+        let mimeType = "";
         if (typeof MediaRecorder !== "undefined") {
-          if (!MediaRecorder.isTypeSupported("audio/webm")) {
-            if (MediaRecorder.isTypeSupported("audio/mp4")) mimeType = "audio/mp4";
-            else if (MediaRecorder.isTypeSupported("audio/ogg")) mimeType = "audio/ogg";
-            else mimeType = "";
-          }
+          if (MediaRecorder.isTypeSupported("audio/mp4"))       mimeType = "audio/mp4";
+          else if (MediaRecorder.isTypeSupported("audio/ogg"))  mimeType = "audio/ogg";
+          else if (MediaRecorder.isTypeSupported("audio/webm")) mimeType = "audio/webm";
+
           const recorder = mimeType
             ? new MediaRecorder(stream, { mimeType })
             : new MediaRecorder(stream);
@@ -2717,11 +2724,14 @@ function VoiceLog({ onItemsParsed }) {
             if (ev.data && ev.data.size > 0) audioChunksRef.current.push(ev.data);
           };
           recorder.onstop = () => {
-            const actualType = recorder.mimeType || mimeType || "audio/webm";
+            // Normalize mime type — strip codec suffixes like ;codecs=opus
+            // Gemini only accepts bare mime types e.g. "audio/mp4" not "audio/mp4;codecs=avc1"
+            const rawType = recorder.mimeType || mimeType || "audio/mp4";
+            const geminiMime = rawType.split(";")[0].trim() || "audio/mp4";
             if (audioChunksRef.current.length > 0) {
-              const audioBlob = new Blob(audioChunksRef.current, { type: actualType });
+              const audioBlob = new Blob(audioChunksRef.current, { type: geminiMime });
               if (!transcriptRef.current || transcriptRef.current.trim().length === 0) {
-                processAudioWithGemini(audioBlob, actualType);
+                processAudioWithGemini(audioBlob, geminiMime);
               }
             }
           };
