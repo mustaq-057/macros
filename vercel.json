@@ -31,12 +31,5 @@
         }
       ]
     }
-  ],
-  "env": {
-    "VITE_GEMINI_API_KEY": "@vite_gemini_api_key",
-    "VITE_DATABASE_URL": "@vite_database_url",
-    "VITE_CLOUDINARY_CLOUD_NAME": "@vite_cloudinary_cloud_name",
-    "VITE_CLOUDINARY_API_KEY": "@vite_cloudinary_api_key",
-    "VITE_CLOUDINARY_API_SECRET": "@vite_cloudinary_api_secret"
-  }
+  ]
 }
