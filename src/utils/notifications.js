@@ -1,12 +1,31 @@
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 
+// Create the notification channel once at startup — not on every call
+let _channelCreated = false;
+async function ensureChannel() {
+  if (_channelCreated) return;
+  try {
+    await LocalNotifications.createChannel({
+      id: 'hydration_reminders',
+      name: 'Hydration & Water Reminders',
+      description: 'Timely reminders to drink water and track macros',
+      importance: 5,
+      visibility: 1,
+      vibration: true,
+    });
+    _channelCreated = true;
+  } catch (err) {}
+}
+
 /**
  * Request notification permissions on Android (native prompt) and Web
  */
 export async function requestNotificationPermission() {
   try {
     if (Capacitor.isNativePlatform()) {
+      // Ensure channel exists as early as possible
+      await ensureChannel();
       const status = await LocalNotifications.checkPermissions();
       if (status.display === 'granted') {
         return true;
@@ -30,18 +49,7 @@ export async function requestNotificationPermission() {
 export async function showNotification(title, body) {
   try {
     if (Capacitor.isNativePlatform()) {
-      // Create notification channel for Android if needed
-      try {
-        await LocalNotifications.createChannel({
-          id: 'hydration_reminders',
-          name: 'Hydration & Water Reminders',
-          description: 'Timely reminders to drink water and track macros',
-          importance: 5,
-          visibility: 1,
-          vibration: true,
-        });
-      } catch (err) {}
-
+      // Channel is already created at startup — fire immediately
       await LocalNotifications.schedule({
         notifications: [
           {
@@ -49,7 +57,7 @@ export async function showNotification(title, body) {
             body,
             id: Math.floor(Math.random() * 90000) + 1000,
             channelId: 'hydration_reminders',
-            schedule: { at: new Date(Date.now() + 150) },
+            schedule: { at: new Date(Date.now() + 50) }, // 50ms — as close to instant as Android allows
           },
         ],
       });
