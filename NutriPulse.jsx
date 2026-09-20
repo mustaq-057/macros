@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import {
   Home, Camera, Sparkles, TrendingUp, Droplet, Plus, X, Check, Search,
   Flame, Dumbbell, Utensils, Send, ChevronRight, ChevronLeft, Pencil, Upload, Info,
-  ArrowLeftRight, ArrowRight, Trash2, Bell, Mic, MicOff, Star, Barcode, Video, VideoOff, RefreshCw
+  ArrowLeftRight, ArrowRight, Trash2, Bell, Mic, MicOff, Star, Barcode, Video, VideoOff, RefreshCw, Download
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -1071,13 +1071,17 @@ const SWAPS = SMART_SWAP_DATABASE.map(s => ({
   note: s.swap.note
 }));
 
-const MACRO_HISTORY_STORAGE_KEY = "jazz_macro_history_real_v3";
+const MACRO_HISTORY_STORAGE_KEY = "jazz_macro_history_real_v4";
 
-// Clean out legacy mock data from browser localStorage
+// Thoroughly wipe all legacy mock and cache entries from browser localStorage
 try {
+  localStorage.removeItem("jazz_macro_history_real_v3");
   localStorage.removeItem("jazz_macro_history_v2");
   localStorage.removeItem("jazz_macro_history_v1");
   localStorage.removeItem("jazz_macro_history");
+  localStorage.removeItem("jazz_macro_mock");
+  localStorage.removeItem("nutripulse_mock");
+  localStorage.removeItem("nutripulse_history");
 } catch (e) {}
 
 function getStoredMacroHistory() {
@@ -1094,13 +1098,14 @@ function getStoredMacroHistory() {
 function genRealHistory(meals = [], activities = [], water = 0, dbHistory = {}) {
   const days = [];
   const today = new Date();
-  const historyMap = { ...getStoredMacroHistory(), ...(dbHistory || {}) };
+  // Purely database history combined with today's live state — ZERO mock numbers
+  const historyMap = { ...(dbHistory || {}) };
   
-  const todayEaten = meals.reduce((sum, m) => sum + (Number(m.calories) || 0), 0);
-  const todayBurned = activities.reduce((sum, a) => sum + (Number(a.calories) || 0), 0);
-  const todayProtein = meals.reduce((sum, m) => sum + (Number(m.protein) || 0), 0);
-  const todayCarbs = meals.reduce((sum, m) => sum + (Number(m.carbs) || 0), 0);
-  const todayFat = meals.reduce((sum, m) => sum + (Number(m.fat) || 0), 0);
+  const todayEaten = (meals || []).reduce((sum, m) => sum + (Number(m.calories) || 0), 0);
+  const todayBurned = (activities || []).reduce((sum, a) => sum + (Number(a.calories) || 0), 0);
+  const todayProtein = (meals || []).reduce((sum, m) => sum + (Number(m.protein) || 0), 0);
+  const todayCarbs = (meals || []).reduce((sum, m) => sum + (Number(m.carbs) || 0), 0);
+  const todayFat = (meals || []).reduce((sum, m) => sum + (Number(m.fat) || 0), 0);
 
   const todayKey = today.toISOString().split("T")[0];
   historyMap[todayKey] = {
@@ -1784,7 +1789,31 @@ function TopBar({ streak = 0, onReplayIntro }) {
         </div>
         <div className="np-date">{today}</div>
       </div>
-      <div className="np-streak"><Flame size={13} /> {streak} day streak</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <a
+          href="https://github.com/mustaq-057/macros/releases"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Download NutriPulse Android APK"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            background: "rgba(31, 93, 76, 0.12)",
+            border: "1px solid rgba(31, 93, 76, 0.35)",
+            borderRadius: 999,
+            padding: "4px 9px",
+            fontSize: 11,
+            fontWeight: 700,
+            color: "var(--brand)",
+            textDecoration: "none",
+            letterSpacing: "0.2px"
+          }}
+        >
+          <Download size={12} /> APK
+        </a>
+        <div className="np-streak"><Flame size={13} /> {streak} day streak</div>
+      </div>
     </div>
   );
 }
@@ -4846,6 +4875,25 @@ function Trends({ history, goals = DEFAULT_GOALS }) {
     <>
       <div className="np-h1" style={{ marginTop: 16 }}>Monthly trends</div>
       <div className="np-sub">Track consistency across the last 30 days</div>
+
+      {loggedDays.length === 0 && (
+        <div style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px dashed rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          padding: "12px 14px",
+          marginTop: 10,
+          marginBottom: 6,
+          fontSize: 12,
+          color: "var(--ink-soft)",
+          display: "flex",
+          alignItems: "center",
+          gap: 8
+        }}>
+          <span>✨</span>
+          <span><strong>Live Data Only:</strong> As you log real meals and activities, your 30-day calorie, macro, and water trends will chart here.</span>
+        </div>
+      )}
 
       <div className="np-range-row">
         <button className={`np-range-btn ${range === "week" ? "active" : ""}`} onClick={() => setRange("week")}>7 days</button>

@@ -1,6 +1,6 @@
 export const GEMINI_API_KEY = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) 
   ? import.meta.env.VITE_GEMINI_API_KEY 
-  : '';
+  : ((typeof process !== 'undefined' && process.env && (process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY)) || (typeof localStorage !== 'undefined' && localStorage.getItem('jazz_gemini_api_key')) || '');
 
 const MODELS = [
   'gemini-3.6-flash',
