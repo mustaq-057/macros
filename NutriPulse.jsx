@@ -2132,23 +2132,6 @@ function ReminderModal({ reminder, setReminder, onClose }) {
           <div className="np-field"><label>From</label><input className="np-input" type="time" value={local.start} onChange={(e) => setLocal((l) => ({ ...l, start: e.target.value }))} /></div>
           <div className="np-field"><label>Until</label><input className="np-input" type="time" value={local.end} onChange={(e) => setLocal((l) => ({ ...l, end: e.target.value }))} /></div>
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <button
-            type="button"
-            className="np-btn np-btn-ghost np-btn-sm"
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 14px", fontSize: 12.5 }}
-            onClick={async () => {
-              const granted = await requestNotificationPermission();
-              if (granted) {
-                showNotification("💧 Test — You're all set!", "Water reminders are working! JazzMacros will keep you hydrated all day. Stay locked in 💪");
-              } else {
-                alert("Please enable notification permissions for JazzMacros in your Android settings.");
-              }
-            }}
-          >
-            <Bell size={15} color="var(--brand)" /> ⚡ Send Test Notification Now
-          </button>
-        </div>
         <button className="np-btn np-btn-brand" style={{ width: "100%" }} onClick={() => { setReminder({ ...local, enabled: true }); onClose(); }}>
           <Check size={16} /> Save schedule
         </button>

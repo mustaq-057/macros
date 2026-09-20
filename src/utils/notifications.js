@@ -57,7 +57,7 @@ export async function showNotification(title, body) {
             body,
             id: Math.floor(Math.random() * 90000) + 1000,
             channelId: 'hydration_reminders',
-            schedule: { at: new Date(Date.now() + 50) }, // 50ms — as close to instant as Android allows
+            schedule: { at: new Date(Date.now() + 10) }, // 10ms — minimum delay for instant Android delivery
           },
         ],
       });
